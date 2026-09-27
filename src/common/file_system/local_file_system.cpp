@@ -123,6 +123,7 @@ std::unique_ptr<FileInfo> LocalFileSystem::openFile(const std::string& path, Fil
         BOOL rc = LockFileEx(handle, dwFlags, 0 /*reserved*/, 1 /*numBytesLow*/, 0 /*numBytesHigh*/,
             &overlapped);
         if (!rc) {
+            CloseHandle(handle);
             throw IOException(
                 "Could not set lock on file : " + fullPath + "\n" +
                 "See the docs: https://docs.ladybugdb.com/concurrency for more information.");
@@ -143,6 +144,7 @@ std::unique_ptr<FileInfo> LocalFileSystem::openFile(const std::string& path, Fil
         fl.l_len = 0;
         int rc = fcntl(fd, F_SETLK, &fl);
         if (rc == -1) {
+            close(fd);
             throw IOException(
                 "Could not set lock on file : " + fullPath + "\n" +
                 "See the docs: https://docs.ladybugdb.com/concurrency for more information.");
