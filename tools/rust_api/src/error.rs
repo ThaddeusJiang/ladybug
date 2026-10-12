@@ -4,6 +4,16 @@ use std::fmt;
 pub enum Error {
     /// Before-replay recovery failed; construction stops without WAL replay.
     BeforeRecoveryFailed,
+    /// Retained-lock admission rejected pending evidence before WAL actions.
+    WalAdmissionFailed,
+    /// Malformed recovery callback declined after typed input admission.
+    MalformedWalRecoveryFailed(Box<Error>),
+    /// Rust admission panic was caught before crossing FFI.
+    WalAdmissionPanicked,
+    /// Rust recovery panic was caught before crossing FFI.
+    MalformedWalRecoveryPanicked(Box<Error>),
+    /// Strict native dry replay rejected records after validating WAL identity.
+    MalformedWal(String),
     /// Exception raised by C++ lbug library
     CxxException(cxx::Exception),
     /// Message produced by lbug when a query fails
@@ -22,6 +32,20 @@ impl std::fmt::Display for Error {
             Error::BeforeRecoveryFailed => {
                 write!(f, "Before-recovery callback failed; WAL replay skipped.")
             }
+            Error::WalAdmissionFailed => {
+                write!(f, "WAL admission rejected; no WAL actions performed.")
+            }
+            Error::MalformedWalRecoveryFailed(cause) => {
+                write!(f, "Malformed WAL recovery declined: {cause}")
+            }
+            Error::WalAdmissionPanicked => {
+                write!(f, "WAL admission callback panicked; construction stopped.")
+            }
+            Error::MalformedWalRecoveryPanicked(cause) => write!(
+                f,
+                "Malformed WAL recovery callback panicked; construction stopped: {cause}"
+            ),
+            Error::MalformedWal(message) => write!(f, "{message}"),
             Error::CxxException(cxx) => write!(f, "{cxx}"),
             Error::FailedQuery(message) => write!(f, "Query execution failed: {message}"),
             Error::FailedPreparedStatement(message) => {
@@ -46,6 +70,8 @@ impl std::error::Error for Error {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Error::CxxException(cxx) => Some(cxx),
+            Error::MalformedWalRecoveryFailed(cause)
+            | Error::MalformedWalRecoveryPanicked(cause) => Some(cause.as_ref()),
             _ => None,
         }
     }
@@ -53,7 +79,14 @@ impl std::error::Error for Error {
 
 impl From<cxx::Exception> for Error {
     fn from(item: cxx::Exception) -> Self {
-        Error::CxxException(item)
+        if item
+            .what()
+            .starts_with("Runtime exception: LBUG_MALFORMED_WAL_INPUT: ")
+        {
+            Error::MalformedWal(item.to_string())
+        } else {
+            Error::CxxException(item)
+        }
     }
 }
 
