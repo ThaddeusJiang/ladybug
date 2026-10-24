@@ -848,7 +848,14 @@ void Value::serialize(Serializer& serializer) const {
 
 std::unique_ptr<Value> Value::deserialize(Deserializer& deserializer) {
     LogicalType dataType = LogicalType::deserialize(deserializer);
-    std::unique_ptr<Value> val = std::make_unique<Value>(createDefaultValue(dataType));
+    std::unique_ptr<Value> val;
+    if (dataType.getPhysicalType() == PhysicalTypeID::ARRAY) {
+        // The serialized children replace any default children below. Do not
+        // materialize ArrayType's persisted element count before it is read.
+        val = std::make_unique<Value>(dataType.copy(), std::vector<std::unique_ptr<Value>>{});
+    } else {
+        val = std::make_unique<Value>(createDefaultValue(dataType));
+    }
     deserializer.deserializeValue(val->isNull_);
     deserializer.deserializeValue(val->childrenSize);
     switch (dataType.getPhysicalType()) {
@@ -903,9 +910,14 @@ std::unique_ptr<Value> Value::deserialize(Deserializer& deserializer) {
     case PhysicalTypeID::ARRAY:
     case PhysicalTypeID::LIST:
     case PhysicalTypeID::STRUCT: {
-        val->children.resize(val->childrenSize);
+        // Value::serialize writes each child as a LogicalType header (three
+        // bytes), a null flag and its own u32 children count. Grow only as
+        // children are decoded; never reserve from the persisted count.
+        deserializer.validateSerializedCount(val->childrenSize,
+            3 * sizeof(uint8_t) + sizeof(bool) + sizeof(uint32_t));
+        val->children.clear();
         for (auto i = 0u; i < val->childrenSize; i++) {
-            val->children[i] = deserialize(deserializer);
+            val->children.push_back(deserialize(deserializer));
         }
     } break;
     case PhysicalTypeID::ANY: {
