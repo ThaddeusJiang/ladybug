@@ -276,6 +276,13 @@ fn build_ffi(
     } else {
         build.flag("-std=c++2a");
     }
+    // cc emits its output directory as a native search path. Keep it away
+    // from OUT_DIR's CMake tree, or rustc caches still traverse that tree.
+    let ffi_output = PathBuf::from(env::var_os("OUT_DIR").unwrap())
+        .join("ffi")
+        .join(out_name);
+    std::fs::create_dir_all(&ffi_output).expect("create FFI output directory");
+    build.out_dir(ffi_output);
     build.compile(out_name);
 }
 

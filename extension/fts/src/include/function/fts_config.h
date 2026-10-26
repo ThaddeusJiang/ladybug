@@ -64,8 +64,12 @@ struct Tokenizer {
 
 struct TokenizerInfo {
     std::string tokenizer = Tokenizer::DEFAULT_VALUE;
+#ifdef LBUG_JIEBA_DICT_DIRECTORY
+    std::string jiebaDictDir = LBUG_JIEBA_DICT_DIRECTORY;
+#else
     std::string jiebaDictDir =
         common::stringFormat("{}/extension/fts/build/dict", LBUG_ROOT_DIRECTORY);
+#endif
 
     TokenizerInfo() = default;
 };

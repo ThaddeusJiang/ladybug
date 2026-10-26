@@ -1,3 +1,9 @@
+# Rust links the extension into its library. Read the bundled dictionaries as
+# source inputs instead of copying them into Cargo's watched extension tree.
+if(LBUG_RUST_OUT_OF_SOURCE)
+    add_compile_definitions(LBUG_JIEBA_DICT_DIRECTORY="${PROJECT_SOURCE_DIR}/third_party/cppjieba/dict")
+endif()
+
 include_directories(
         ${PROJECT_SOURCE_DIR}/src/include
         ${CMAKE_BINARY_DIR}/src/include
@@ -23,8 +29,10 @@ target_link_libraries(lbug_${EXTENSION_LIB_NAME}_extension
         re2
         cppjieba)
 
-# Copy Jieba dictionaries next to the built extension so runtime can find a default path
-add_custom_command(TARGET lbug_${EXTENSION_LIB_NAME}_extension POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_directory
-        ${PROJECT_SOURCE_DIR}/third_party/cppjieba/dict
-        ${PROJECT_SOURCE_DIR}/extension/fts/build/dict)
+# Other build surfaces keep dictionaries next to the extension.
+if(NOT LBUG_RUST_OUT_OF_SOURCE)
+    add_custom_command(TARGET lbug_${EXTENSION_LIB_NAME}_extension POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${PROJECT_SOURCE_DIR}/third_party/cppjieba/dict
+            ${PROJECT_SOURCE_DIR}/extension/fts/build/dict)
+endif()

@@ -97,6 +97,9 @@ mod tests {
             fs::read_to_string(output.join("libfixture.a"))?,
             "different"
         );
+        fs::remove_file(source.join("fixture.lib"))?;
+        stage_directories(std::slice::from_ref(&source), &output)?;
+        assert!(!output.join("fixture.lib").exists());
         let other = root.join("other");
         fs::create_dir_all(&other)?;
         fs::write(other.join("libfixture.a"), "conflict")?;
