@@ -77,18 +77,18 @@ if(DEFINED ENV{PYTHON_EXECUTABLE})
 endif()
 
 find_program(CCACHE_PROGRAM ccache)
-if (CCACHE_PROGRAM)
-    set(CMAKE_C_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
-    set(CMAKE_CXX_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
-    message(STATUS "ccache found and enabled")
-else ()
+if(NOT CCACHE_PROGRAM)
     find_program(CCACHE_PROGRAM sccache)
-    if (CCACHE_PROGRAM)
-        set(CMAKE_C_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
-        set(CMAKE_CXX_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
-        message(STATUS "sccache found and enabled")
-    endif ()
-endif ()
+endif()
+if(CCACHE_PROGRAM)
+    foreach(language C CXX)
+        # The caller can supply a cache launcher, or an empty value to disable
+        # one. Do not replace mbx or another explicit launcher during configure.
+        if(NOT DEFINED CMAKE_${language}_COMPILER_LAUNCHER)
+            set(CMAKE_${language}_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
+        endif()
+    endforeach()
+endif()
 
 set(INSTALL_LIB_DIR
         lib

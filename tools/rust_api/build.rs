@@ -1,3 +1,6 @@
+#[path = "src/native_cache.rs"]
+mod native_cache;
+
 use std::env;
 use std::path::{Path, PathBuf};
 
@@ -122,7 +125,8 @@ fn build_bundled_cmake() -> Vec<PathBuf> {
         .no_build_target(true)
         .define("BUILD_SHELL", "OFF")
         .define("BUILD_SINGLE_FILE_HEADER", "OFF")
-        .define("AUTO_UPDATE_GRAMMAR", "OFF");
+        .define("AUTO_UPDATE_GRAMMAR", "OFF")
+        .define("LBUG_RUST_OUT_OF_SOURCE", "ON");
     if cfg!(windows) {
         build.generator("Ninja");
         build.cxxflag("/EHsc");
@@ -135,19 +139,20 @@ fn build_bundled_cmake() -> Vec<PathBuf> {
     let build_dir = build.build();
 
     let lbug_lib_path = build_dir.join("build").join("src");
-    println!("cargo:rustc-link-search=native={}", lbug_lib_path.display());
+    let mut native_directories = vec![lbug_lib_path];
 
     // Stage the statically-linked builtin extension archives (our fork's
     // extension_config.cmake builds them as lib<name>_static.lbug_extension
-    // under <source>/extension/<name>/build) into OUT_DIR with standard
+    // under <binary>/extension/<name>/artifacts) into OUT_DIR with standard
     // lib*.a names so rustc-link-lib can find them.
     let ext_lib_dir = build_dir.join("builtin_extensions");
     std::fs::create_dir_all(&ext_lib_dir).expect("create builtin_extensions dir");
     for ext in ["fts", "algo", "json", "vector"] {
-        let src = lbug_root
+        let src = build_dir
+            .join("build")
             .join("extension")
             .join(ext)
-            .join("build")
+            .join("artifacts")
             .join(format!("lib{ext}_static.lbug_extension"));
         let dst = ext_lib_dir.join(format!("liblbug_{ext}_static_extension.a"));
         if src.exists() {
@@ -161,7 +166,7 @@ fn build_bundled_cmake() -> Vec<PathBuf> {
             );
         }
     }
-    println!("cargo:rustc-link-search=native={}", ext_lib_dir.display());
+    native_directories.push(ext_lib_dir);
 
     // fts depends on the bundled snowball stemmer (built out-of-source).
     let snowball_dir = build_dir
@@ -170,7 +175,7 @@ fn build_bundled_cmake() -> Vec<PathBuf> {
         .join("fts")
         .join("third_party")
         .join("snowball");
-    println!("cargo:rustc-link-search=native={}", snowball_dir.display());
+    native_directories.push(snowball_dir);
 
     for dir in [
         "utf8proc",
@@ -203,8 +208,16 @@ fn build_bundled_cmake() -> Vec<PathBuf> {
                     dir
                 )
             });
-        println!("cargo:rustc-link-search=native={}", lib_path.display());
+        native_directories.push(lib_path);
     }
+
+    // A native search directory is a compiler input. Do not expose the CMake
+    // object tree: caches would have to hash objects and configuration files
+    // that the linker never reads, and can exceed their input budgets.
+    let native_links = build_dir.join("native_links");
+    native_cache::stage_directories(&native_directories, &native_links)
+        .expect("stage native link libraries");
+    println!("cargo:rustc-link-search=native={}", native_links.display());
 
     vec![
         lbug_root.join("src/include"),

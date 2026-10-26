@@ -8,11 +8,18 @@ include(extension_config.cmake)
 set(STATICALLY_LINKED_EXTENSIONS "${STATICALLY_LINKED_EXTENSIONS}" PARENT_SCOPE)
 
 function(set_extension_properties target_name output_name extension_name)
+    if(LBUG_RUST_OUT_OF_SOURCE)
+        # Cargo watches extension/ as an input. Rust builds must not put their
+        # output back into that tree or share it with another Cargo target.
+        set(extension_output_dir "${PROJECT_BINARY_DIR}/extension/${extension_name}/artifacts")
+    else()
+        set(extension_output_dir "${PROJECT_SOURCE_DIR}/extension/${extension_name}/build")
+    endif()
     set_target_properties(${target_name}
             PROPERTIES
-            ARCHIVE_OUTPUT_DIRECTORY "${PROJECT_SOURCE_DIR}/extension/${extension_name}/build"
-            LIBRARY_OUTPUT_DIRECTORY "${PROJECT_SOURCE_DIR}/extension/${extension_name}/build"
-            RUNTIME_OUTPUT_DIRECTORY "${PROJECT_SOURCE_DIR}/extension/${extension_name}/build"
+            ARCHIVE_OUTPUT_DIRECTORY "${extension_output_dir}"
+            LIBRARY_OUTPUT_DIRECTORY "${extension_output_dir}"
+            RUNTIME_OUTPUT_DIRECTORY "${extension_output_dir}"
             OUTPUT_NAME ${output_name}
             PREFIX "lib"
             SUFFIX ".lbug_extension"
